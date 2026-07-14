@@ -1,3 +1,12 @@
+<img width="1920" height="1080" alt="图片1" src="https://github.com/user-attachments/assets/078c212d-6bc5-44ac-9c31-cd8947b9b713" />
+<img width="1920" height="1080" alt="图片2" src="https://github.com/user-attachments/assets/519d8cb8-269a-4b0b-9d79-fcc5e6ee50b0" />
+<img width="1920" height="1080" alt="图片3" src="https://github.com/user-attachments/assets/049f3406-09ae-432b-95d3-54ba7085dd6c" />
+<img width="1920" height="1080" alt="图片4" src="https://github.com/user-attachments/assets/8fe549b0-6706-4cfe-b679-4fa21dca1c1b" />
+<img width="1920" height="1080" alt="图片5" src="https://github.com/user-attachments/assets/f5d9dbb8-ed80-48b7-a127-763beff987b3" />
+<img width="1920" height="1080" alt="图片6" src="https://github.com/user-attachments/assets/0fc6c4f0-b34f-4a4d-b608-ed1fd8a1d0e9" />
+
+
+
 # 智能客服 Agent 系统
 
 基于 **LangGraph + MCP + Vue 3** 的全栈智能客服/工单分诊系统。
