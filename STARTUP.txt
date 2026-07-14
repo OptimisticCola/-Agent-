@@ -1,0 +1,142 @@
+# ============================================================
+#  医院智能助手 Agent 系统 — 启动命令速查
+#  更新时间: 2026-07-14
+# ============================================================
+
+# ----------------------------------------------------------
+#  前置条件
+# ----------------------------------------------------------
+# 1. Python 3.10+, Node.js 20+, Docker Desktop 已安装
+# 2. .env 文件在项目根目录，配置好 API Key
+# 3. 首次使用先安装依赖
+
+# 后端依赖
+cd backend
+python -m venv venv
+.\venv\Scripts\activate          # Windows
+# source venv/bin/activate       # Mac/Linux
+pip install -r requirements.txt
+
+# 前端依赖
+cd frontend
+npm install
+
+
+# ============================================================
+#  方式一：纯 Docker（全家桶一键启动）
+# ============================================================
+cd D:\code\my-agent-project
+
+# 仅启动基础设施: Milvus + etcd + minio
+docker-compose up -d
+
+# 启动全部服务: 基础设施 + MCP × 4 + 后端 + 前端
+docker-compose --profile full up -d --build
+
+# 停止所有
+docker-compose --profile full down
+
+# 清理 Docker 垃圾（释放磁盘空间）
+docker system prune -a
+
+
+# ============================================================
+#  方式二：Docker 基础设施 + 本地跑前后端（推荐开发）
+# ============================================================
+
+# ---- 第 1 步：启动 Milvus ----
+docker-compose up -d
+# 只启动 etcd + minio + milvus，MCP/前后端都不启动
+
+# ---- 第 2 步：启动 MCP Servers（4 个新终端）----
+cd backend && .\venv\Scripts\activate
+python -m mcp_servers.knowledge_server    # 端口 8001
+
+cd backend && .\venv\Scripts\activate
+python -m mcp_servers.ticket_server        # 端口 8002
+
+cd backend && .\venv\Scripts\activate
+python -m mcp_servers.order_server         # 端口 8003
+
+cd backend && .\venv\Scripts\activate
+python -m mcp_servers.human_server         # 端口 8004
+
+# ---- 第 3 步：启动后端 ----
+cd backend && .\venv\Scripts\activate
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# ---- 第 4 步：启动前端 ----
+cd frontend
+npm run dev
+
+
+# ============================================================
+#  方式三：最简模式（只开后端 + 前端，无 MCP）
+# ============================================================
+# 后端会自动降级到本地兜底逻辑，MCP 不可用也不影响
+
+# 第 1 步：Docker 启动 Milvus
+docker-compose up -d
+
+# 第 2 步：后端
+cd backend && .\venv\Scripts\activate
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# 第 3 步：前端
+cd frontend
+npm run dev
+
+
+# ============================================================
+#  数据管理
+# ============================================================
+
+# 插入 / 重置医疗知识数据到 Milvus
+cd backend && .\venv\Scripts\activate
+python scripts/insert_milvus_data.py
+
+# 修复 Milvus 索引
+cd backend && .\venv\Scripts\activate
+python fix_milvus_index.py
+
+
+# ============================================================
+#  访问地址
+# ============================================================
+# 前端:  http://localhost:5173
+# 后端:  http://localhost:8000
+# 后端文档: http://localhost:8000/docs
+# Milvus: localhost:19530
+# MinIO 控制台: http://localhost:9001  (admin / minioadmin)
+
+
+# ============================================================
+#  常用调试命令
+# ============================================================
+
+# 查看 Milvus 数据量
+python -c "from pymilvus import Collection, connections; connections.connect(host='localhost',port=19530); c=Collection('customer_service_knowledge'); c.load(); print('数据量:', c.num_entities)"
+
+# 查看 Docker 运行状态
+docker ps
+
+# 查看某个容器日志
+docker logs agent-backend --tail 50
+docker logs milvus-standalone --tail 50
+
+# 重启某个 Docker 服务
+docker-compose restart milvus-standalone
+
+
+# ============================================================
+#  Docker 服务端口一览
+# ============================================================
+# milvus-standalone   → 19530 (gRPC), 9091 (metrics)
+# milvus-etcd         → 2379
+# milvus-minio        → 9001
+# mcp-knowledge       → 8001
+# mcp-ticket          → 8002
+# mcp-order           → 8003
+# mcp-human           → 8004
+# agent-backend       → 8000
+# agent-frontend      → 5173

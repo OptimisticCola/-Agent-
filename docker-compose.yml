@@ -1,0 +1,197 @@
+version: '3.8'
+
+# ============================================
+# 智能客服 Agent 系统 — Docker Compose
+# ============================================
+
+services:
+  # --- Milvus 向量数据库 ---
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ./data/etcd:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - agent-network
+
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - ./data/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "9001:9001"
+    networks:
+      - agent-network
+
+  milvus:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.4.0
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: minioadmin
+      MINIO_SECRET_ACCESS_KEY: minioadmin
+    volumes:
+      - ./data/milvus:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - agent-network
+
+  # --- MCP Servers ---
+  mcp-knowledge:
+    container_name: mcp-knowledge
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    environment:
+      - MCP_SERVER=knowledge_server
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - MILVUS_COLLECTION_NAME=customer_service_knowledge
+    ports:
+      - "8001:8001"
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  mcp-ticket:
+    container_name: mcp-ticket
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    environment:
+      - MCP_SERVER=ticket_server
+    ports:
+      - "8002:8002"
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  mcp-order:
+    container_name: mcp-order
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    environment:
+      - MCP_SERVER=order_server
+    ports:
+      - "8003:8003"
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  mcp-human:
+    container_name: mcp-human
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    environment:
+      - MCP_SERVER=human_server
+    ports:
+      - "8004:8004"
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # --- 后端 API ---
+  backend:
+    profiles:
+      - full
+      - backend
+    container_name: agent-backend
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-your-api-key-here}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - MCP_KNOWLEDGE_URL=http://mcp-knowledge:8001
+      - MCP_TICKET_URL=http://mcp-ticket:8002
+      - MCP_ORDER_URL=http://mcp-order:8003
+      - MCP_HUMAN_URL=http://mcp-human:8004
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    volumes:
+      - ./data/backend:/app/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      milvus:
+        condition: service_healthy
+      mcp-knowledge:
+        condition: service_started
+      mcp-ticket:
+        condition: service_started
+      mcp-order:
+        condition: service_started
+      mcp-human:
+        condition: service_started
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # --- 前端 ---
+  frontend:
+    profiles:
+      - full
+      - frontend
+    container_name: agent-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+networks:
+  agent-network:
+    driver: bridge
+
+volumes:
+  etcd_data:
+  minio_data:
+  milvus_data:
+  chroma_data:

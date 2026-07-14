@@ -1,0 +1,17 @@
+# ============================================
+# MCP Server Dockerfile
+# ============================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装依赖
+COPY backend/requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制代码
+COPY backend/ /app/backend/
+WORKDIR /app/backend
+
+# 默认启动参数由环境变量 MCP_SERVER 控制
+CMD sh -c "python -m mcp_servers.${MCP_SERVER}"

@@ -1,0 +1,16 @@
+# ============================================
+# 前端 Dockerfile
+# ============================================
+FROM node:20-alpine
+
+WORKDIR /app
+
+# 安装依赖 + Alpine 下 rollup 的 musl 兼容包
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install && npm install --save-optional @rollup/rollup-linux-x64-musl
+
+# 复制代码
+COPY frontend/ .
+
+# 启动开发服务器
+CMD npm run dev -- --host 0.0.0.0
